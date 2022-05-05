@@ -29,6 +29,7 @@ import io.debezium.jdbc.JdbcConnection;
 import io.debezium.pipeline.EventDispatcher;
 import io.debezium.pipeline.EventDispatcher.SnapshotReceiver;
 import io.debezium.pipeline.source.AbstractSnapshotChangeEventSource;
+import io.debezium.pipeline.source.spi.RelationalSnapshotColumnSelector;
 import io.debezium.pipeline.source.spi.SnapshotChangeEventSource;
 import io.debezium.pipeline.source.spi.SnapshotProgressListener;
 import io.debezium.pipeline.source.spi.StreamingChangeEventSource;
@@ -63,6 +64,7 @@ public abstract class RelationalSnapshotChangeEventSource<P extends Partition, O
     protected final EventDispatcher<P, TableId> dispatcher;
     protected final Clock clock;
     private final SnapshotProgressListener<P> snapshotProgressListener;
+    private final RelationalSnapshotColumnSelector columnSelector;
 
     public RelationalSnapshotChangeEventSource(RelationalDatabaseConnectorConfig connectorConfig,
                                                JdbcConnection jdbcConnection, RelationalDatabaseSchema schema,
@@ -74,6 +76,7 @@ public abstract class RelationalSnapshotChangeEventSource<P extends Partition, O
         this.dispatcher = dispatcher;
         this.clock = clock;
         this.snapshotProgressListener = snapshotProgressListener;
+        this.columnSelector = new RelationalSnapshotColumnSelector(connectorConfig, jdbcConnection);
     }
 
     @Override
@@ -441,7 +444,7 @@ public abstract class RelationalSnapshotChangeEventSource<P extends Partition, O
             return Optional.of(enhanceOverriddenSelect(snapshotContext, overriddenSelect, tableId));
         }
 
-        List<String> columns = getPreparedColumnNames(snapshotContext.partition, schema.tableFor(tableId));
+        List<String> columns = columnSelector.getPreparedColumnNames(schema.tableFor(tableId));
 
         return getSnapshotSelect(snapshotContext, tableId, columns);
     }

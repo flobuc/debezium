@@ -25,6 +25,7 @@ import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.stream.Collectors;
 
+import io.debezium.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -542,13 +543,13 @@ public class SqlServerConnection extends JdbcConnection {
     }
 
     @Override
-    public String buildSelectWithRowLimits(TableId tableId, int limit, String projection, Optional<String> condition,
+    public String buildSelectWithRowLimits(TableId tableId, int limit, List<String> projection, Optional<String> condition,
                                            String orderBy) {
         final StringBuilder sql = new StringBuilder("SELECT TOP ");
         sql
                 .append(limit)
                 .append(' ')
-                .append(projection)
+                .append(Strings.join(", ", projection))
                 .append(" FROM ");
         sql.append(quotedTableIdString(tableId));
         if (condition.isPresent()) {

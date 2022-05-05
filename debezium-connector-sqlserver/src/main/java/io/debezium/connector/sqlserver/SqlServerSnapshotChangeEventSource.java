@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiPredicate;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -22,6 +23,7 @@ import org.slf4j.LoggerFactory;
 
 import io.debezium.connector.sqlserver.SqlServerConnectorConfig.SnapshotIsolationMode;
 import io.debezium.pipeline.EventDispatcher;
+import io.debezium.pipeline.source.spi.RelationalSnapshotColumnSelector;
 import io.debezium.pipeline.source.spi.SnapshotProgressListener;
 import io.debezium.relational.Column;
 import io.debezium.relational.RelationalSnapshotChangeEventSource;
@@ -271,24 +273,21 @@ public class SqlServerSnapshotChangeEventSource extends RelationalSnapshotChange
     @Override
     protected String enhanceOverriddenSelect(RelationalSnapshotContext<SqlServerPartition, SqlServerOffsetContext> snapshotContext,
                                              String overriddenSelect, TableId tableId) {
-        String snapshotSelectColumns = getPreparedColumnNames(snapshotContext.partition, sqlServerDatabaseSchema.tableFor(tableId)).stream()
+
+        BiPredicate<Table, String> filterChangeTableColumns = (table, columnName) -> {
+            SqlServerChangeTable changeTable = changeTablesByPartition.get(snapshotContext.partition).get(table.id());
+            if (changeTable != null) {
+                return changeTable.getCapturedColumns().contains(columnName);
+            }
+            // ChangeTable will be null if cdc has not been enabled for it yet.
+            // Return true to allow columns to be captured.
+            return true;
+        };
+
+        RelationalSnapshotColumnSelector columnSelector = new RelationalSnapshotColumnSelector(connectorConfig, jdbcConnection, filterChangeTableColumns);
+        String snapshotSelectColumns = columnSelector.getPreparedColumnNames(sqlServerDatabaseSchema.tableFor(tableId)).stream()
                 .collect(Collectors.joining(", "));
         return overriddenSelect.replaceAll(SELECT_ALL_PATTERN.pattern(), snapshotSelectColumns);
-    }
-
-    @Override
-    protected boolean additionalColumnFilter(SqlServerPartition partition, TableId tableId, String columnName) {
-        return filterChangeTableColumns(partition, tableId, columnName);
-    }
-
-    private boolean filterChangeTableColumns(SqlServerPartition partition, TableId tableId, String columnName) {
-        SqlServerChangeTable changeTable = changeTablesByPartition.get(partition).get(tableId);
-        if (changeTable != null) {
-            return changeTable.getCapturedColumns().contains(columnName);
-        }
-        // ChangeTable will be null if cdc has not been enabled for it yet.
-        // Return true to allow columns to be captured.
-        return true;
     }
 
     /**
